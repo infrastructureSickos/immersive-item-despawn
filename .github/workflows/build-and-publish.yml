@@ -42,7 +42,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: immersive-item-despawn-jar
-          path: build/libs/immersive_item_despawn-${{ steps.props.outputs.mod_version }}.jar
+          path: build/libs/immersive-item-despawn-${{ steps.props.outputs.mod_version }}.jar
           if-no-files-found: error
 
   publish:
@@ -71,7 +71,7 @@ jobs:
           set -euo pipefail
 
           TAG="${GITHUB_REF_NAME}"
-          JAR_FILE="build/libs/immersive_item_despawn-${MOD_VERSION}.jar"
+          JAR_FILE="build/libs/immersive-item-despawn-${MOD_VERSION}.jar"
 
           DATA=$(python3 -c "
           import json
