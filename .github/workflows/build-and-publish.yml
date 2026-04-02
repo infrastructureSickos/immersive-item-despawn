@@ -1,0 +1,98 @@
+name: Build and Publish to Modrinth
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build jar
+        run: ./gradlew build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-jar
+          path: build/libs/*.jar
+          if-no-files-found: error
+
+      - name: Publish to Modrinth
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-id: ${{ vars.MODRINTH_PROJECT_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}
+          files: build/libs/!(*-sources).jar
+          name: ${{ github.ref_name }}
+          version: ${{ github.ref_name }}
+          version-type: release
+          game-versions: 1.20.1
+          loaders: forge
+
+      - name: Checkout server repo
+        uses: actions/checkout@v4
+        with:
+          repository: infrastructureSickos/server
+          token: ${{ secrets.INFRA_BOT_PAT }}
+          path: server
+
+      - name: Update mods-list.json
+        run: |
+          set -euo pipefail
+          cd server
+
+          python3 - <<'PYEOF'
+          import json, os
+
+          path = 'mods-list.json'
+          mod_project_id = 'immersive-item-despawn'
+          mod_name = 'ImmersiveItemDespawn'
+          version = os.environ.get('GITHUB_REF_NAME', 'unknown')
+
+          with open(path) as f:
+              mods = json.load(f)
+
+          entry_found = False
+          for mod in mods:
+              if mod.get('modrinth_project_id') == mod_project_id:
+                  mod['version'] = version
+                  entry_found = True
+                  break
+
+          if not entry_found:
+              mods.append({
+                  'name': mod_name,
+                  'modrinth_project_id': mod_project_id,
+                  'version': version
+              })
+              print(f'Added new entry for {mod_project_id}: {version}')
+          else:
+              print(f'Updated {mod_project_id} to version: {version}')
+
+          with open(path, 'w') as f:
+              json.dump(mods, f, indent=2)
+              f.write('\n')
+          PYEOF
+
+      - name: Commit and push
+        run: |
+          cd server
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mods-list.json
+          git commit -m "chore: update immersive-item-despawn to ${{ github.ref_name }}"
+          git push
